@@ -2,6 +2,8 @@ import usb.core
 from struct import pack
 import threading
 import time
+import code
+from _struct import unpack
 
 hci_device = None
 
@@ -16,27 +18,44 @@ commands_op_code = {
     "set scan rsp data"         : (0x8, 0x9),
     "set adv enable"            : (0x8, 0xa),
                     }
+
+event_handlers = {}
+
+cmd_done_condition = threading.Condition()
+done_events = {}
+
 def event_thread(dev):
 
         global hci_device
         
         while True:
-            time.sleep(1)
+            #time.sleep(1)
             
             #hci_device.ctrl_transfer(0x20, 0x00, 0x00, 0x00, msg_empy)
             #hci_device.ctrl_transfer(0x20, 0x00, 0x00, 0x00, msg_empy)
             try:
-                code = hci_device.read(0x81, 256 + 2, timeout=0)
-                #param_len = hci_device.read(0x81, 1)
-                #param = hci_device.read(0x81, param_len)
+                evt_packet = hci_device.read(0x81, 256 + 2, timeout=0)
+                code = evt_packet[0]
+                param_len = evt_packet[1] # hci_device.read(0x81, 1)
+                param = evt_packet[2 : 2 + param_len] #hci_device.read(0x81, param_len)
                 
             except:
                 print "exception ..."
                 raise
             
-            print code
-            #print param
-    
+            try:
+                event_handlers[code](param.tostring())
+            except KeyError:
+                print "recieved event %d with no handler" % code
+                
+def cmd_done_evt_handler(param):
+    # post the event into the list of done events
+    cmd_done_condition.acquire()
+    opcode = unpack("<H", param[1:3])[0]
+    status = param[3:]
+    done_events[opcode] = status
+    cmd_done_condition.notify_all() 
+    cmd_done_condition.release()
     
 class hci_if:
     def __init__(self):
@@ -49,16 +68,32 @@ class hci_if:
         self.event_thread = threading.Thread(target=event_thread, 
                                              name="hci_event_thread",
                                              args=self.dev)
+        self.register_event_handler(14, cmd_done_evt_handler)
         self.event_thread.start()
         #hci_device.ctrl_transfer(0x20, 0x00, 0x00, 0x00, [0x03 , 0x0c, 0])
         self.reset()
             
+    def register_event_handler(self, evt_code, handler):
+        event_handlers[evt_code] = handler
         
     def send_cmd(self, ocf, ogf, args):
         # for now only supporting USB
         opcode = (ocf << 6) | ogf
         msg = pack("<HB", opcode, len(args)) + args
         self.dev.ctrl_transfer(0x20, 0x00, 0x00, 0x00, msg)
+        
+        # wait for an event
+        ret_status = None
+        while ret_status is None:
+            cmd_done_condition.acquire()
+            cmd_done_condition.wait()
+            if opcode in done_events:
+                ret_status = done_events[opcode]
+                del done_events[opcode]
+            cmd_done_condition.release()
+        
+        return ret_status
+            
     
     def reset(self):
         self.send_cmd(0x3, 0x3, "")
