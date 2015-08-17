@@ -4,6 +4,7 @@ import threading
 import time
 import code
 from _struct import unpack
+import hci_constants
 
 hci_device = None
 
@@ -112,17 +113,17 @@ class hci_if:
                 le_event_mask[index] += event[index]
         self.send_cmd(0x8, 0x1, le_event_mask)
         
-    def set_adv_params(self, Advertising_Interval_Min,
+    def le_set_adv_params(self, Advertising_Interval_Min,
                 Advertising_Interval_Max,
-                Advertising_Type,
-                Own_Address_Type,
-                Peer_Address_Type,
-                Peer_Address,
-                Advertising_Channel_Map,
-                Advertising_Filter_Policy
+                Advertising_Type = hci_constants.advertising_types.ADV_IND,
+                Own_Address_Type = hci_constants.advertising_address_types.PUBLIC,
+                Peer_Address_Type = hci_constants.advertising_address_types.PUBLIC,
+                Peer_Address = "\x00\x00\x00\x00\x00\x00",
+                Advertising_Channel_Map = hci_constants.advertising_channel_map.CHANNEL_ALL,
+                Advertising_Filter_Policy = hci_constants.advertising_filter_policy.NONE
                 ):
         
-        args = pack("<HHBBBBBB",Advertising_Interval_Min,
+        args = pack("<HHBBBsBB",Advertising_Interval_Min,
                 Advertising_Interval_Max,
                 Advertising_Type,
                 Own_Address_Type,
@@ -132,3 +133,19 @@ class hci_if:
                 Advertising_Filter_Policy)
         
         self.send_cmd(0x8, 0x6, args)
+        
+    def le_set_adv_data(self, data):
+        args = pack("<Bs", len(data), data)
+        self.send_cmd(0x8, 0x8, args)
+        
+    def le_set_scan_rsp_data(self, data):
+        args = pack("<Bs", len(data), data)
+        self.send_cmd(0x8, 0x9, args)
+        
+    def le_set_adv_enable(self, enabled = True):
+        if enabled:
+            args = "\0x1"
+        else:
+            args = "\0x0"
+        self.send_cmd(0x8, 0xa, args)
+        

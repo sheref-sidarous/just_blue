@@ -24,4 +24,6 @@ if False:
         break
 else:
     hci_interface = hci.hci_if()
-    #hci_interface.reset()
+    hci_interface.le_set_adv_params(0x80, 0x85);
+    hci_interface.le_set_adv_data("\x0a\x09just blue")
+    hci_interface.le_set_adv_enable(True)
