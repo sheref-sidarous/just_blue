@@ -79,7 +79,7 @@ class hci_if:
         
     def send_cmd(self, ocf, ogf, args):
         # for now only supporting USB
-        opcode = (ocf << 6) | ogf
+        opcode = (ocf << 10) | ogf
         msg = pack("<HB", opcode, len(args)) + args
         self.dev.ctrl_transfer(0x20, 0x00, 0x00, 0x00, msg)
         
@@ -92,8 +92,11 @@ class hci_if:
                 ret_status = done_events[opcode]
                 del done_events[opcode]
             cmd_done_condition.release()
-        
-        return ret_status
+            
+        err_code = unpack("<B", ret_status[0:1])[0]
+            
+        if err_code != 0:
+            raise Exception("HCI command returned %d"% err_code)
             
     
     def reset(self):
@@ -144,8 +147,8 @@ class hci_if:
         
     def le_set_adv_enable(self, enabled = True):
         if enabled:
-            args = "\0x1"
+            args = "\x01"
         else:
-            args = "\0x0"
+            args = "\x00"
         self.send_cmd(0x8, 0xa, args)
         
