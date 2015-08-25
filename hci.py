@@ -126,7 +126,7 @@ class hci_if:
                 Advertising_Filter_Policy = hci_constants.advertising_filter_policy.NONE
                 ):
         
-        args = pack("<HHBBBsBB",Advertising_Interval_Min,
+        args = pack("<HHBBB6sBB",Advertising_Interval_Min,
                 Advertising_Interval_Max,
                 Advertising_Type,
                 Own_Address_Type,
@@ -138,11 +138,13 @@ class hci_if:
         self.send_cmd(0x8, 0x6, args)
         
     def le_set_adv_data(self, data):
-        args = pack("<Bs", len(data), data)
+        args = pack("<B", len(data)) + data
+        while len(args) < 32 :
+            args = args + "\x00"
         self.send_cmd(0x8, 0x8, args)
         
     def le_set_scan_rsp_data(self, data):
-        args = pack("<Bs", len(data), data)
+        args = pack("<B", len(data)) + data
         self.send_cmd(0x8, 0x9, args)
         
     def le_set_adv_enable(self, enabled = True):

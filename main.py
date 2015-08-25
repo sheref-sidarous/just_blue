@@ -25,7 +25,7 @@ if False:
         break
 else:
     hci_interface = hci.hci_if()
-    #hci_interface.le_set_adv_params(0x800, 0x850);
+    hci_interface.le_set_adv_params(0x20, 0x25);
     name = "just blue"
-    hci_interface.le_set_adv_data(struct.pack("BBBBBs", 2, 1, 6, len(name) + 1, 0x09, name))
+    hci_interface.le_set_adv_data(struct.pack("BBBBB", 2, 1, 6, len(name) + 1, 0x09) + name)
     hci_interface.le_set_adv_enable(True)
