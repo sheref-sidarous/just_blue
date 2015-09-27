@@ -4,6 +4,7 @@ import threading
 import time
 import code
 from _struct import unpack
+from l2cap import l2cap
 import hci_constants
 
 hci_device = None
@@ -21,9 +22,11 @@ commands_op_code = {
                     }
 
 event_handlers = {}
+le_meta_event_handlers = {}
 
 cmd_done_condition = threading.Condition()
 done_events = {}
+l2cap_handles = {}
 
 def event_thread(dev):
 
@@ -48,6 +51,29 @@ def event_thread(dev):
                 event_handlers[code](param.tostring())
             except KeyError:
                 print "recieved event %d with no handler" % code
+
+def acl_read_thread(dev):
+
+        global hci_device
+        
+        while True:
+            #time.sleep(1)
+            
+            #hci_device.ctrl_transfer(0x20, 0x00, 0x00, 0x00, msg_empy)
+            #hci_device.ctrl_transfer(0x20, 0x00, 0x00, 0x00, msg_empy)
+            try:
+                packet = (hci_device.read(0x82, 256 + 2, timeout=0)).tostring()
+                (handle, length) = unpack("<HH", packet[0:4])
+                handle &= 0xFFFF
+                payload = packet[4:4+length]
+                
+                if not handle in l2cap_handles:
+                    l2cap_handles[handle] = l2cap.l2cap(handle)
+                l2cap_handles[handle].process_packet(payload)
+
+            except:
+                print "exception ..."
+                raise
                 
 def cmd_done_evt_handler(param):
     # post the event into the list of done events
@@ -58,6 +84,20 @@ def cmd_done_evt_handler(param):
     cmd_done_condition.notify_all() 
     cmd_done_condition.release()
     
+def le_meta_event_handler(param):
+    subcode = unpack("<B", param[0:1])[0]
+    try:
+        le_meta_event_handlers[subcode](param[1:])
+    except KeyError:
+        print "recieved le meta event %d with no handler" % subcode
+    
+def connection_complete_handler(param):
+    (status, handle, role, 
+        peer_addr_type, peer_address, 
+        interval, latency, 
+        supervision_to, master_clock_acc) = unpack("<BHBB6sHHHB", param)
+
+
 class hci_if:
     def __init__(self):
         self.dev = usb.core.find(idVendor=0x0a5c, idProduct=0x21e8)
@@ -69,13 +109,26 @@ class hci_if:
         self.event_thread = threading.Thread(target=event_thread, 
                                              name="hci_event_thread",
                                              args=self.dev)
-        self.register_event_handler(14, cmd_done_evt_handler)
+        self.register_event_handler(hci_constants.event_codes.COMMAND_DONE, cmd_done_evt_handler)
+        self.register_event_handler(hci_constants.event_codes.LE_META_EVENT, le_meta_event_handler)
+        self.register_le_meta_event_handler(
+                hci_constants.le_meta_event_subcodes.CONNECTION_COMPLETE, 
+                connection_complete_handler)
         self.event_thread.start()
         #hci_device.ctrl_transfer(0x20, 0x00, 0x00, 0x00, [0x03 , 0x0c, 0])
+        
+        self.acl_read_thread = threading.Thread(target=acl_read_thread, 
+                                             name="acl_read_thread",
+                                             args=self.dev)
+        self.acl_read_thread.start()
+        
         self.reset()
             
     def register_event_handler(self, evt_code, handler):
         event_handlers[evt_code] = handler
+        
+    def register_le_meta_event_handler(self, subcode, handler):
+        le_meta_event_handlers[subcode] = handler
         
     def send_cmd(self, ocf, ogf, args):
         # for now only supporting USB

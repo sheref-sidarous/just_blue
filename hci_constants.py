@@ -5,7 +5,11 @@ Created on 17 Aug 2015
 '''
 
 class event_codes():
-    COMMAND_DONE = 14
+    COMMAND_DONE = 0x0E
+    LE_META_EVENT = 0x3E
+
+class le_meta_event_subcodes():
+    CONNECTION_COMPLETE = 0x01
     
 
 """as defined in Vol 2, Part E, Secion 7.8.5"""
